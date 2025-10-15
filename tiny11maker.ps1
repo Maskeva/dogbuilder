@@ -279,20 +279,6 @@ Write-Output "Removing OneDrive:"
 & 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" | Out-Null
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" -Force | Out-Null
-
-Write-Output "Removing OneDrive components from WinSxS..."
-$oneDriveSxsPaths = Get-ChildItem -Path "$ScratchDisk\scratchdir\Windows\WinSxS" -Directory | Where-Object { $_.Name -like "*OneDrive*" }
-foreach ($sxsPath in $oneDriveSxsPaths) {
-    try {
-        & 'takeown' '/f' $sxsPath.FullName '/r' '/d y' | Out-Null
-        & 'icacls' $sxsPath.FullName '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
-        Remove-Item -Path $sxsPath.FullName -Recurse -Force -ErrorAction Stop
-        Write-Output "Removed OneDrive SxS components: $($sxsPath.Name)"
-    } catch {
-        Write-Output "Removal of OneDrive SxS components failed: $($sxsPath.Name) - $_"
-    }
-}
-
 Write-Output "Removal complete!"
 Start-Sleep -Seconds 2
 Clear-Host

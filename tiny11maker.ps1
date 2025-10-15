@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    用于构建精简版 Windows 11 镜像的脚本. 修改部分贴合自用.
+    Scripts to build a trimmed-down Windows 11 image.
 
 .DESCRIPTION
-    此脚本旨在自动化构建精简版 Windows 11 镜像,类似于 tiny10.
-    我的主要目标是仅使用 Microsoft 实用程序(如 DISM),不使用来自外部来源的实用程序.
-    包含的唯一可执行文件是 oscdimg.exe,它由 Windows ADK 提供,用于创建可启动的 ISO 镜像.
+    This is a script created to automate the build of a streamlined Windows 11 image, similar to tiny10.
+    My main goal is to use only Microsoft utilities like DISM, and no utilities from external sources.
+    The only executable included is oscdimg.exe, which is provided in the Windows ADK and it is used to create bootable ISO images.
 
 .PARAMETER ISO
-    分配给已挂载 ISO 的驱动器号(例如：E)
+    Drive letter given to the mounted iso (eg: E)
 
 .PARAMETER SCRATCH
-    所需暂存磁盘的驱动器号(例如：D)
+    Drive letter of the desired scratch disk (eg: D)
 
 .EXAMPLE
     .\dogmaker.ps1 E D
@@ -19,15 +19,15 @@
     .\dogmaker.ps1 -SCRATCH D -ISO E
     .\dogmaker.ps1
 
-    *如果使用位置参数,第一个必须是已挂载的 ISO 驱动器号,第二个是暂存驱动器.
-    建议使用完整的命名参数(例如："-ISO"),因为可以按任意顺序放置.
+    *If you ordinal parameters the first one must be the mounted iso. The second is the scratch drive.
+    prefer the use of full named parameter (eg: "-ISO") as you can put in the order you want.
 
 .NOTES
-    作者: ntdevlabs
-    日期: 09-07-25
+    Auteur: ntdevlabs
+    Date: 09-07-25
 #>
 
-#---------[ 参数 ]---------#
+#---------[ Parameters ]---------#
 param (
     [ValidatePattern('^[c-zC-Z]$')][string]$ISO,
     [ValidatePattern('^[c-zC-Z]$')][string]$SCRATCH
@@ -39,7 +39,7 @@ if (-not $SCRATCH) {
     $ScratchDisk = $SCRATCH + ":"
 }
 
-#---------[ 函数 ]---------#
+#---------[ Functions ]---------#
 function Set-RegistryValue {
     param (
         [string]$path,
@@ -49,9 +49,9 @@ function Set-RegistryValue {
     )
     try {
         & 'reg' 'add' $path '/v' $name '/t' $type '/d' $value '/f' | Out-Null
-        Write-Output "设置注册表值: $path\$name"
+        Write-Output "Set registry value: $path\$name"
     } catch {
-        Write-Output "设置注册表值时出错: $_"
+        Write-Output "Error setting registry value: $_"
     }
 }
 
@@ -61,26 +61,26 @@ function Remove-RegistryValue {
 	)
 	try {
 		& 'reg' 'delete' $path '/f' | Out-Null
-		Write-Output "已删除注册表值: $path"
+		Write-Output "Removed registry value: $path"
 	} catch {
-		Write-Output "删除注册表值时出错: $_"
+		Write-Output "Error removing registry value: $_"
 	}
 }
 
-#---------[ 执行 ]---------#
-# 检查 PowerShell 执行是否受限
+#---------[ Execution ]---------#
+# Check if PowerShell execution is restricted
 if ((Get-ExecutionPolicy) -eq 'Restricted') {
-    Write-Output "您当前的 PowerShell 执行策略设置为 Restricted,这会阻止脚本运行.是否要将其更改为 RemoteSigned?(yes/no)"
+    Write-Output "Your current PowerShell Execution Policy is set to Restricted, which prevents scripts from running. Do you want to change it to RemoteSigned? (yes/no)"
     $response = Read-Host
     if ($response -eq 'yes') {
         Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Confirm:$false
     } else {
-        Write-Output "不更改执行策略无法运行脚本.正在退出..."
+        Write-Output "The script cannot be run without changing the execution policy. Exiting..."
         exit
     }
 }
 
-# 检查并在需要时以管理员身份运行脚本
+# Check and run the script as admin if required
 $adminSID = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
 $adminGroup = $adminSID.Translate([System.Security.Principal.NTAccount])
 $myWindowsID=[System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -88,7 +88,7 @@ $myWindowsPrincipal=new-object System.Security.Principal.WindowsPrincipal($myWin
 $adminRole=[System.Security.Principal.WindowsBuiltInRole]::Administrator
 if (! $myWindowsPrincipal.IsInRole($adminRole))
 {
-    Write-Output "正在新窗口中以管理员身份重新启动 dog 镜像创建器,您可以关闭此窗口."
+    Write-Output "Restarting dog image creator as admin in a new window, you can close this one."
     $newProcess = new-object System.Diagnostics.ProcessStartInfo "PowerShell";
     $newProcess.Arguments = $myInvocation.MyCommand.Definition;
     $newProcess.Verb = "runas";
@@ -100,66 +100,66 @@ if (-not (Test-Path -Path "$PSScriptRoot/autounattend.xml")) {
     Invoke-RestMethod "https://raw.githubusercontent.com/Maskeva/dogbuilder/refs/heads/main/autounattend.xml" -OutFile "$PSScriptRoot/autounattend.xml"
 }
 
-# 开始记录并准备窗口
+# Start the transcript and prepare the window
 Start-Transcript -Path "$PSScriptRoot\dog_$(get-date -f yyyyMMdd_HHmms).log"
 
-$Host.UI.RawUI.WindowTitle = "dog 镜像创建器"
+$Host.UI.RawUI.WindowTitle = "dog image creator"
 Clear-Host
-Write-Output "欢迎使用 dog 镜像创建器！版本: 09-07-25"
+Write-Output "Welcome to the dog image creator! Release: 09-07-25"
 
 $hostArchitecture = $Env:PROCESSOR_ARCHITECTURE
 New-Item -ItemType Directory -Force -Path "$ScratchDisk\dog\sources" | Out-Null
 do {
     if (-not $ISO) {
-        $DriveLetter = Read-Host "请输入 Windows 11 镜像的驱动器号"
+        $DriveLetter = Read-Host "Please enter the drive letter for the Windows 11 image"
     } else {
         $DriveLetter = $ISO
     }
     if ($DriveLetter -match '^[c-zC-Z]$') {
         $DriveLetter = $DriveLetter + ":"
-        Write-Output "驱动器号设置为 $DriveLetter"
+        Write-Output "Drive letter set to $DriveLetter"
     } else {
-        Write-Output "无效的驱动器号.请输入 C 到 Z 之间的字母."
+        Write-Output "Invalid drive letter. Please enter a letter between C and Z."
     }
 } while ($DriveLetter -notmatch '^[c-zC-Z]:$')
 
 if ((Test-Path "$DriveLetter\sources\boot.wim") -eq $false -or (Test-Path "$DriveLetter\sources\install.wim") -eq $false) {
     if ((Test-Path "$DriveLetter\sources\install.esd") -eq $true) {
-        Write-Output "找到 install.esd,正在转换为 install.wim..."
+        Write-Output "Found install.esd, converting to install.wim..."
         Get-WindowsImage -ImagePath $DriveLetter\sources\install.esd
-        $index = Read-Host "请输入镜像索引"
+        $index = Read-Host "Please enter the image index"
         Write-Output ' '
-        Write-Output '正在将 install.esd 转换为 install.wim.这可能需要一段时间...'
+        Write-Output 'Converting install.esd to install.wim. This may take a while...'
         Export-WindowsImage -SourceImagePath $DriveLetter\sources\install.esd -SourceIndex $index -DestinationImagePath $ScratchDisk\dog\sources\install.wim -Compressiontype Maximum -CheckIntegrity
     } else {
-        Write-Output "在指定的驱动器号中找不到 Windows 操作系统安装文件.."
-        Write-Output "请输入正确的 DVD 驱动器号.."
+        Write-Output "Can't find Windows OS Installation files in the specified Drive Letter.."
+        Write-Output "Please enter the correct DVD Drive Letter.."
         exit
     }
 }
 
-Write-Output "正在复制 Windows 镜像..."
+Write-Output "Copying Windows image..."
 Copy-Item -Path "$DriveLetter\*" -Destination "$ScratchDisk\dog" -Recurse -Force | Out-Null
 Set-ItemProperty -Path "$ScratchDisk\dog\sources\install.esd" -Name IsReadOnly -Value $false > $null 2>&1
 Remove-Item "$ScratchDisk\dog\sources\install.esd" > $null 2>&1
-Write-Output "复制完成！"
+Write-Output "Copy complete!"
 Start-Sleep -Seconds 2
 Clear-Host
-Write-Output "正在获取镜像信息:"
+Write-Output "Getting image information:"
 $ImagesIndex = (Get-WindowsImage -ImagePath $ScratchDisk\dog\sources\install.wim).ImageIndex
 while ($ImagesIndex -notcontains $index) {
     Get-WindowsImage -ImagePath $ScratchDisk\dog\sources\install.wim
-    $index = Read-Host "请输入镜像索引"
+    $index = Read-Host "Please enter the image index"
 }
-Write-Output "正在挂载 Windows 镜像.这可能需要一段时间."
+Write-Output "Mounting Windows image. This may take a while."
 $wimFilePath = "$ScratchDisk\dog\sources\install.wim"
 & takeown "/F" $wimFilePath
 & icacls $wimFilePath "/grant" "$($adminGroup.Value):(F)"
 try {
     Set-ItemProperty -Path $wimFilePath -Name IsReadOnly -Value $false -ErrorAction Stop
 } catch {
-    # 此块将捕获错误并抑制它.
-	Write-Error "$wimFilePath 未找到"
+    # This block will catch the error and suppress it.
+	Write-Error "$wimFilePath not found"
 }
 New-Item -ItemType Directory -Force -Path "$ScratchDisk\scratchdir" > $null
 Mount-WindowsImage -ImagePath $ScratchDisk\dog\sources\install.wim -Index $index -Path $ScratchDisk\scratchdir
@@ -169,9 +169,9 @@ $languageLine = $imageIntl -split '\n' | Where-Object { $_ -match 'Default syste
 
 if ($languageLine) {
     $languageCode = $Matches[1]
-    Write-Output "默认系统 UI 语言代码: $languageCode"
+    Write-Output "Default system UI language code: $languageCode"
 } else {
-    Write-Output "未找到默认系统 UI 语言代码."
+    Write-Output "Default system UI language code not found."
 }
 
 $imageInfo = & 'dism' '/English' '/Get-WimInfo' "/wimFile:$($ScratchDisk)\dog\sources\install.wim" "/index:$index"
@@ -180,20 +180,20 @@ $lines = $imageInfo -split '\r?\n'
 foreach ($line in $lines) {
     if ($line -like '*Architecture : *') {
         $architecture = $line -replace 'Architecture : ',''
-        # 如果架构是 x64,则替换为 amd64
+        # If the architecture is x64, replace it with amd64
         if ($architecture -eq 'x64') {
             $architecture = 'amd64'
         }
-        Write-Output "架构: $architecture"
+        Write-Output "Architecture: $architecture"
         break
     }
 }
 
 if (-not $architecture) {
-    Write-Output "未找到架构信息."
+    Write-Output "Architecture information not found."
 }
 
-Write-Output "挂载完成！正在执行应用程序移除..."
+Write-Output "Mounting complete! Performing removal of applications..."
 
 $packages = & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Get-ProvisionedAppxPackages' |
     ForEach-Object {
@@ -260,8 +260,6 @@ $packagePrefixes = 'AppUp.IntelManagementandSecurityStatus',
 'Microsoft.Windows.Photos',
 'MicrosoftWindows.Client.WebExperience'
 
-
-
 $packagesToRemove = $packages | Where-Object {
     $packageName = $_
     $packagePrefixes -contains ($packagePrefixes | Where-Object { $packageName -like "*$_*" })
@@ -270,42 +268,41 @@ foreach ($package in $packagesToRemove) {
     & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Remove-ProvisionedAppxPackage' "/PackageName:$package"
 }
 
-Write-Output "正在移除 Edge:"
+Write-Output "Removing Edge:"
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\Edge" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeUpdate" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeCore" -Recurse -Force | Out-Null
 & 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" '/r' | Out-Null
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" -Recurse -Force | Out-Null
-Write-Output "正在移除 OneDrive:"
+Write-Output "Removing OneDrive:"
 & 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" | Out-Null
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" -Force | Out-Null
 
-# 删除 WinSxS 文件夹下的 OneDrive 相关目录
-Write-Output "正在移除 WinSxS 中的 OneDrive 组件..."
+Write-Output "Removing OneDrive components from WinSxS..."
 $oneDriveSxsPaths = Get-ChildItem -Path "$ScratchDisk\scratchdir\Windows\WinSxS" -Directory | Where-Object { $_.Name -like "*OneDrive*" }
 foreach ($sxsPath in $oneDriveSxsPaths) {
     try {
         & 'takeown' '/f' $sxsPath.FullName '/r' '/d y' | Out-Null
         & 'icacls' $sxsPath.FullName '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
         Remove-Item -Path $sxsPath.FullName -Recurse -Force -ErrorAction Stop
-        Write-Output "已移除 OneDrive SxS 组件: $($sxsPath.Name)"
+        Write-Output "Removed OneDrive SxS components: $($sxsPath.Name)"
     } catch {
-        Write-Output "移除 OneDrive SxS 组件失败: $($sxsPath.Name) - $_"
+        Write-Output "Removal of OneDrive SxS components failed: $($sxsPath.Name) - $_"
     }
 }
 
-Write-Output "移除完成！"
+Write-Output "Removal complete!"
 Start-Sleep -Seconds 2
 Clear-Host
-Write-Output "正在加载注册表..."
+Write-Output "Loading registry..."
 reg load HKLM\zCOMPONENTS $ScratchDisk\scratchdir\Windows\System32\config\COMPONENTS | Out-Null
 reg load HKLM\zDEFAULT $ScratchDisk\scratchdir\Windows\System32\config\default | Out-Null
 reg load HKLM\zNTUSER $ScratchDisk\scratchdir\Users\Default\ntuser.dat | Out-Null
 reg load HKLM\zSOFTWARE $ScratchDisk\scratchdir\Windows\System32\config\SOFTWARE | Out-Null
 reg load HKLM\zSYSTEM $ScratchDisk\scratchdir\Windows\System32\config\SYSTEM | Out-Null
-Write-Output "正在禁用赞助应用:"
+Write-Output "Disabling Sponsored Apps:"
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'OemPreInstalledAppsEnabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'PreInstalledAppsEnabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SilentInstalledAppsEnabled' 'REG_DWORD' '0'
@@ -329,23 +326,23 @@ Remove-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Con
 Remove-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\SuggestedApps'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableConsumerAccountStateContent' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableCloudOptimizedContent' 'REG_DWORD' '1'
-Write-Output "在 OOBE 上启用本地账户:"
+Write-Output "Enabling Local Accounts on OOBE:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\OOBE' 'BypassNRO' 'REG_DWORD' '1'
 Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\scratchdir\Windows\System32\Sysprep\autounattend.xml" -Force | Out-Null
 
-Write-Output "正在禁用保留存储:"
+Write-Output "Disabling Reserved Storage:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager' 'ShippedWithReserves' 'REG_DWORD' '0'
-Write-Output "正在禁用 BitLocker 设备加密"
+Write-Output "Disabling BitLocker Device Encryption"
 Set-RegistryValue 'HKLM\zSYSTEM\ControlSet001\Control\BitLocker' 'PreventDeviceEncryption' 'REG_DWORD' '1'
-Write-Output "正在禁用聊天图标:"
+Write-Output "Disabling Chat icon:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat' 'ChatIcon' 'REG_DWORD' '3'
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarMn' 'REG_DWORD' '0'
-Write-Output "正在移除 Edge 相关注册表项"
+Write-Output "Removing Edge related registries"
 Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge"
 Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge Update"
-Write-Output "正在禁用 OneDrive 文件夹备份"
+Write-Output "Disabling OneDrive folder backup"
 Set-RegistryValue "HKLM\zSOFTWARE\Policies\Microsoft\Windows\OneDrive" "DisableFileSyncNGSC" "REG_DWORD" "1"
-Write-Output "正在禁用遥测:"
+Write-Output "Disabling Telemetry:"
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' 'Enabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Privacy' 'TailoredExperiencesWithDiagnosticDataEnabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy' 'HasAccepted' 'REG_DWORD' '0'
@@ -356,86 +353,86 @@ Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\InputPersonalization\TrainedD
 Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Personalization\Settings' 'AcceptedPrivacyPolicy' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\DataCollection' 'AllowTelemetry' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zSYSTEM\ControlSet001\Services\dmwappushservice' 'Start' 'REG_DWORD' '4'
-## 阻止安装 DevHome 和 Outlook
-Write-Output "正在阻止安装 DevHome 和 Outlook:"
+## Prevents installation of DevHome and Outlook
+Write-Output "Prevents installation of DevHome and Outlook:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate' 'workCompleted' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler\OutlookUpdate' 'workCompleted' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler\DevHomeUpdate' 'workCompleted' 'REG_DWORD' '1'
 Remove-RegistryValue 'HKLM\zSOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate'
 Remove-RegistryValue 'HKLM\zSOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\DevHomeUpdate'
-Write-Output "正在禁用 Copilot"
+Write-Output "Disabling Copilot"
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Edge' 'HubsSidebarEnabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Explorer' 'DisableSearchBoxSuggestions' 'REG_DWORD' '1'
-Write-Output "正在阻止安装 Teams:"
+Write-Output "Prevents installation of Teams:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Teams' 'DisableInstallation' 'REG_DWORD' '1'
-Write-Output "正在阻止安装 New Outlook":
+Write-Output "Prevent installation of New Outlook":
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Mail' 'PreventRun' 'REG_DWORD' '1'
 
-Write-Host "正在删除计划任务定义文件..."
+Write-Host "Deleting scheduled task definition files..."
 $tasksPath = "$ScratchDisk\scratchdir\Windows\System32\Tasks"
 
-# 应用程序兼容性评估器
+# Application Compatibility Appraiser
 Remove-Item -Path "$tasksPath\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser" -Force -ErrorAction SilentlyContinue
 
-# 客户体验改善计划(移除整个文件夹及其中的所有任务)
+# Customer Experience Improvement Program (removes the entire folder and all tasks within it)
 Remove-Item -Path "$tasksPath\Microsoft\Windows\Customer Experience Improvement Program" -Recurse -Force -ErrorAction SilentlyContinue
 
-# 程序数据更新器
+# Program Data Updater
 Remove-Item -Path "$tasksPath\Microsoft\Windows\Application Experience\ProgramDataUpdater" -Force -ErrorAction SilentlyContinue
 
-# Chkdsk 代理
+# Chkdsk Proxy
 Remove-Item -Path "$tasksPath\Microsoft\Windows\Chkdsk\Proxy" -Force -ErrorAction SilentlyContinue
 
-# Windows 错误报告(QueueReporting)
+# Windows Error Reporting (QueueReporting)
 Remove-Item -Path "$tasksPath\Microsoft\Windows\Windows Error Reporting\QueueReporting" -Force -ErrorAction SilentlyContinue
-Write-Host "任务文件已删除."
-Write-Host "正在卸载注册表..."
+Write-Host "Task files have been deleted."
+Write-Host "Unmounting Registry..."
 reg unload HKLM\zCOMPONENTS | Out-Null
 reg unload HKLM\zDEFAULT | Out-Null
 reg unload HKLM\zNTUSER | Out-Null
 reg unload HKLM\zSOFTWARE | Out-Null
 reg unload HKLM\zSYSTEM | Out-Null
-Write-Output "正在清理镜像..."
+Write-Output "Cleaning up image..."
 dism.exe /Image:$ScratchDisk\scratchdir /Cleanup-Image /StartComponentCleanup /ResetBase
-Write-Output "清理完成."
+Write-Output "Cleanup complete."
 Write-Output ' '
-Write-Output "正在卸载镜像..."
+Write-Output "Unmounting image..."
 Dismount-WindowsImage -Path $ScratchDisk\scratchdir -Save
-Write-Host "正在导出镜像..."
+Write-Host "Exporting image..."
 Dism.exe /Export-Image /SourceImageFile:"$ScratchDisk\dog\sources\install.wim" /SourceIndex:$index /DestinationImageFile:"$ScratchDisk\dog\sources\install2.wim" /Compress:recovery
 Remove-Item -Path "$ScratchDisk\dog\sources\install.wim" -Force | Out-Null
 Rename-Item -Path "$ScratchDisk\dog\sources\install2.wim" -NewName "install.wim" | Out-Null
-Write-Output "Windows 镜像已完成.继续处理 boot.wim."
+Write-Output "Windows image completed. Continuing with boot.wim."
 Start-Sleep -Seconds 2
 Clear-Host
 
-Write-Output "dog 镜像现已完成.正在继续制作 ISO..."
-Write-Output "正在复制用于在 OOBE 上绕过 Microsoft 账户的无人值守文件..."
+Write-Output "The dog image is now completed. Proceeding with the making of the ISO..."
+Write-Output "Copying unattended file for bypassing MS account on OOBE..."
 Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\dog\autounattend.xml" -Force | Out-Null
-Write-Output "正在创建 ISO 镜像..."
+Write-Output "Creating ISO image..."
 $ADKDepTools = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\$hostarchitecture\Oscdimg"
 $localOSCDIMGPath = "$PSScriptRoot\oscdimg.exe"
 
 if ([System.IO.Directory]::Exists($ADKDepTools)) {
-    Write-Output "将使用系统 ADK 中的 oscdimg.exe."
+    Write-Output "Will be using oscdimg.exe from system ADK."
     $OSCDIMG = "$ADKDepTools\oscdimg.exe"
 } else {
-    Write-Output "未找到 ADK 文件夹.将使用捆绑的 oscdimg.exe."
+    Write-Output "ADK folder not found. Will be using bundled oscdimg.exe."
     $url = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
 
     if (-not (Test-Path -Path $localOSCDIMGPath)) {
-        Write-Output "正在下载 oscdimg.exe..."
+        Write-Output "Downloading oscdimg.exe..."
         Invoke-WebRequest -Uri $url -OutFile $localOSCDIMGPath
 
         if (Test-Path $localOSCDIMGPath) {
-            Write-Output "oscdimg.exe 下载成功."
+            Write-Output "oscdimg.exe downloaded successfully."
         } else {
-            Write-Error "下载 oscdimg.exe 失败."
+            Write-Error "Failed to download oscdimg.exe."
             exit 1
         }
     } else {
-        Write-Output "oscdimg.exe 已本地存在."
+        Write-Output "oscdimg.exe already exists locally."
     }
 
     $OSCDIMG = $localOSCDIMGPath
@@ -443,67 +440,68 @@ if ([System.IO.Directory]::Exists($ADKDepTools)) {
 
 & "$OSCDIMG" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$ScratchDisk\dog\boot\etfsboot.com#pEF,e,b$ScratchDisk\dog\efi\microsoft\boot\efisys.bin" "$ScratchDisk\dog" "$PSScriptRoot\dog.iso"
 
-# 收尾工作
-Write-Output "创建完成！按任意键退出脚本..."
-Read-Host "按回车键继续"
-Write-Output "正在执行清理..."
+# Finishing up
+Write-Output "Creation completed! Press any key to exit the script..."
+Read-Host "Press Enter to continue"
+Write-Output "Performing Cleanup..."
 Remove-Item -Path "$ScratchDisk\dog" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir" -Recurse -Force | Out-Null
-Write-Output "正在弹出 ISO 驱动器"
+Write-Output "Ejecting Iso drive"
 Get-Volume -DriveLetter $DriveLetter[0] | Get-DiskImage | Dismount-DiskImage
-Write-Output "ISO 驱动器已弹出"
-Write-Output "正在移除 oscdimg.exe..."
+Write-Output "Iso drive ejected"
+Write-Output "Removing oscdimg.exe..."
 Remove-Item -Path "$PSScriptRoot\oscdimg.exe" -Force -ErrorAction SilentlyContinue
-Write-Output "正在移除 autounattend.xml..."
+Write-Output "Removing autounattend.xml..."
 Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
 
-Write-Output "清理检查:"
+Write-Output "Cleanup check :"
 if (Test-Path -Path "$ScratchDisk\dog") {
-    Write-Output "dog 文件夹仍然存在.正在尝试再次移除..."
+    Write-Output "dog folder still exists. Attempting to remove it again..."
     Remove-Item -Path "$ScratchDisk\dog" -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$ScratchDisk\dog") {
-        Write-Output "移除 dog 文件夹失败."
+        Write-Output "Failed to remove dog folder."
     } else {
-        Write-Output "dog 文件夹已成功移除."
+        Write-Output "dog folder removed successfully."
     }
 } else {
-    Write-Output "dog 文件夹不存在.无需操作."
+    Write-Output "dog folder does not exist. No action needed."
 }
 if (Test-Path -Path "$ScratchDisk\scratchdir") {
-    Write-Output "scratchdir 文件夹仍然存在.正在尝试再次移除..."
+    Write-Output "scratchdir folder still exists. Attempting to remove it again..."
     Remove-Item -Path "$ScratchDisk\scratchdir" -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$ScratchDisk\scratchdir") {
-        Write-Output "移除 scratchdir 文件夹失败."
+        Write-Output "Failed to remove scratchdir folder."
     } else {
-        Write-Output "scratchdir 文件夹已成功移除."
+        Write-Output "scratchdir folder removed successfully."
     }
 } else {
-    Write-Output "scratchdir 文件夹不存在.无需操作."
+    Write-Output "scratchdir folder does not exist. No action needed."
 }
 if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
-    Write-Output "oscdimg.exe 仍然存在.正在尝试再次移除..."
+    Write-Output "oscdimg.exe still exists. Attempting to remove it again..."
     Remove-Item -Path "$PSScriptRoot\oscdimg.exe" -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
-        Write-Output "移除 oscdimg.exe 失败."
+        Write-Output "Failed to remove oscdimg.exe."
     } else {
-        Write-Output "oscdimg.exe 已成功移除."
+        Write-Output "oscdimg.exe removed successfully."
     }
 } else {
-    Write-Output "oscdimg.exe 不存在.无需操作."
+    Write-Output "oscdimg.exe does not exist. No action needed."
 }
 if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-    Write-Output "autounattend.xml 仍然存在.正在尝试再次移除..."
+    Write-Output "autounattend.xml still exists. Attempting to remove it again..."
     Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-        Write-Output "移除 autounattend.xml 失败."
+        Write-Output "Failed to remove autounattend.xml."
     } else {
-        Write-Output "autounattend.xml 已成功移除."
+        Write-Output "autounattend.xml removed successfully."
     }
 } else {
-    Write-Output "autounattend.xml 不存在.无需操作."
+    Write-Output "autounattend.xml does not exist. No action needed."
 }
 
-# 停止记录
+# Stop the transcript
 Stop-Transcript
 
 exit
+
